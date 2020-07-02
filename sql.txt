@@ -1,0 +1,76 @@
+Stored Procedure standardization
+Use DELIMITER // at the beginning of SP
+stored procedure name starts with up_
+user defined function name starts with uf_
+parameters passed in starts with p
+delcared variable name starts with v
+use upper case letters for keywords like SELECT, UPDATE, FROM, JOIN, GROUP BY, DELETE, INTO, ORDER BY etc
+each sp starts with a new line and ends with a new line
+
+Input parameter in SP need to use same datatype as what we have in table
+Comment your codes 
+Remove unused variables and code immediately upon completion of procedure.
+Use this format when commit svn:
+[TargetVersion][#TicketNumer] Ticket description
+Example: [6.0.0][#PINB-10884]PE - New Rollover Tools - Integration - Migrate old data to adapt with the new rollover system
+Create new SP instead of editing existing working SP when add or remove parameter
+Write each procedure so that it has a single clearly defined purpose instead of use 1 procedure for all kind of purpose by adding IF ELSE
+Avoid prepared statements when possible. If not possible, remember to add deallocate at the end of SP
+PREPARE STMT FROM @memStr;
+EXECUTE STMT;
+DEALLOCATE PREPARE STMT;
+
+Create temporary tables with ENGINE=MEMORY for better performance.
+Always drop temporary tables at the end of procedure to avoid memory leak.
+Don’t use “SELECT *”, only retrieve rows or columns that you really need.
+Don’t use FIND_IN_SET to avoid bad performance
+Don’t use USING in Join condition
+If sub query cannot be avoided and is used in join clause, create temporary table instead
+Avoid function on the left-hand side of the operator at all costs.
+SELECT a, b, c
+FROM table
+WHERE DATE(a) = CURRENT_DATE;
+
+Option:
+
+
+
+SELECT a, b, c
+FROM table
+WHERE a>=CURRENT_DATE() AND a<CURRENT_DATE() + INTERVAL 1 DAY;
+
+Avoid overriding variable declaration within “inner” block
+DECLARE vCounter INT DEFAULT 1;
+
+### Lots of Code ###
+
+inr_blk: BEGIN
+DECLARE vCounter INT DEFAULT 2;
+### Lots of Code ###
+
+SET vCounter=vCounter + 1;
+END inr_blk;
+
+Avoid using IF and OR statement under WHERE condition as it will confuse MYSQL to use effective index
+SELECT a, b, c
+FROM table
+WHERE IF(b='true', a=1, b=2);
+
+SELECT a, b, c
+FROM table
+WHERE a = 1 or b = 1;
+Replace complex expressions with functions, this applies when the complex expression is in the select outcome.
+Add primary key, key when use temporary table            
+Use DISTINCT instead of GROUP BY when the query doesn't have any aggregate function
+Always try to join/search with primary key whenever its possible
+Always try to get some parameter to filter out data in SP
+Optimize conditional structure so more likely expressions appear earlier.
+Use effective indexes. Create an index on all columns required, so index scan instead of table scan. The order of the key is also important
+Avoid accidental table scan (% in front of the search string, missing “leading” columns for multicolumn index).
+Avoid range comparison unless the column to be compared is the last column to be used in multiple column index, join config table if it's unavoidable.
+transaction handling:
+start transaction explicitly either from apps or from procedure.
+
+keep transaction small
+
+don't ever leave transaction dangling.
