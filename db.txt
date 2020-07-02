@@ -1,0 +1,105 @@
+Chose optimal data types.
+Smaller is usually better.
+It uses less storage space in disk, memory and even in the CPU cache. However, make sure that u don't underestimate the range of values that u need to store, as increasing the data type range in multiple places can be a painful and time-consuming operations. Choose the smallest one that u think u'll never exceed.
+Simple is good.
+Few CPU cycles are typically required to process operations on simpler types, integers are faster than characters (charset and collations).
+Avoid NULL if possible.
+For each field, default to NOT NULL unless NULL is necessary for the field.
+Use VARCHAR instead CHAR when storing variable length strings.
+CHAR is fixed length and VARCHAR is variable length. CHAR always uses the same amount of storage space per entry, while VARCHAR only uses the amount necessary to store the actual text.
+Example: For column login_in the max length is 50 so we should use VARCHAR(50) instead of CHAR(50).
+Use bit fields for boolean values. Using integer or varchar is unnecessarily storage consuming. Also start those column names with “Is”.
+Example: To know the record deleted on UI or not we can add column isdeleted BIT()
+Try to add columns have default values. 
+Insert values explicitly only when the value to be inserted differs from the default.
+This reduces the parsing that MySQL must do and improves the insert speed.
+
+Example: column status of user, we can set the default data is "ACTIVE".
+Use UNSIGNED with integer columns (tinyint, smallint, mediumint, int, bigint) if make sure it has no negative numbers.(etc: log_id, user_id...)
+
+Naming conventions
+Do not capitalized in the name of table, column.
+Example: use user_name instead of UserName
+Use _ to separate the name of table, column.
+Example: use user_info
+Primary key in parent table should the same name foreign key in child table.
+Don’t use spaces for table names.
+Don’t use unnecessary prefixes or suffixes for table names.
+Example: do not use tbl_user_info, tbl_account
+Use singular for table names
+Table represents a collection of entities, there is no need for plural names.
+Example: use account instead of accounts.
+
+Use well defined and consistent names for tables and columns.
+
+Use short, meaningful names
+Long, complicated names for tables and columns are hard to understand. Just simple names, in the context of the table are much easier to read and understand.
+
+Use indexes for frequently used queries on big tables.
+Choose columns with the integer data type (or its variants) for indexing. varchar column indexing will cause performance problems.
+Don’t duplicate leading parts of compound keys: 
+- index key123 (col1,col2,col3)
+- index key12 (col1,col2) → Not needed! 
+- index key1 (col1) → Not needed!
+Don't put index on all columns it will make update and insert slow.
+Keep passwords as encrypted for security. Decrypt them in application when required.
+Always have primary key in your table. If id is not required for the time being, it may be required in the future (for association tables, indexing ...).
+Image and blob data columns must not be defined in frequently queried tables because of performance issues. These data must be placed in separate tables and their pointer can be used in queried tables.
+Do a clear separation between data fields
+Each column should play its own, well-defined role. Just avoid mixing up the information. 
+Example:in the case of an address, is better to have separate fields for town, zipcode, street and house number then having a single database field called address. Later you can search easier, enforce constraint checks over zipcode, and so on.
+
+No column should depend on other non-primary key columns.
+Example: table order(customer_id, product_id, price, amount, total_pay)
+So total_pay = amount * price --> no need add column total_pay into table anymore.
+
+Do not set any collation in the table creation
+Changing the server collation is not a straight forward decision, there may be other databases on the server which may get impacted.
+
+Follow the Normalization form
+Normalization is a process of organizing the data in database to avoid data redundancy, insertion anomaly, update anomaly & deletion anomaly. 
+
+First normal form (1NF)
+As per the rule of first normal form, an attribute (column) of a table cannot hold multiple values. It should hold only atomic values.
+Example: Suppose a company wants to store the names and contact details of its user. It creates a table that looks like this:
+
+
+Two users (Jon & Lester) are having two mobile numbers so the company stored them in the same field as you can see in the table above.
+
+This table is not in 1NF as the rule says “each attribute of a table must have atomic (single) values”, the mobile values for users Jon & Lester violates that rule.
+
+To make the table complies with 1NF we should have the data like this:
+
+
+Second normal form (2NF)
+
+A table is said to be in 2NF if both the following conditions hold:
+
+Table is in 1NF (First normal form)
+No non-prime attribute is dependent on the proper subset of any Primary key of table.
+Example: Suppose a school wants to store the data of teachers and the subjects they teach. They create a table that looks like this: Since a teacher can teach more than one subjects, the table can have multiple rows for a same teacher.
+
+
+Primary Keys: {teacher_id, subject}
+The table is in 1NF because each attribute has atomic values. However, it is not in 2NF because non prime attribute teacher_age is dependent on teacher_id alone which is a proper subset of Primary key. This violates the rule for 2NF as the rule says “no non-prime attribute is dependent on the proper subset of any candidate key of the table”.
+To make the table complies with 2NF we can break it in two tables like this:
+
+teacher_details table:
+
+
+
+teacher_subject table:
+
+
+
+Third normal form (3NF)
+A table design is said to be in 3NF if both the following conditions hold:
+
+Table must be in 2NF
+Transitive functional dependency of non-prime attribute on any primary key should be removed.
+Example: we have table order like this
+
+We can see column total_pay = amount * price --> no need add column total_pay into table anymore.
+So to make the table complies with 3NF we can change order table like this 
+
+Create summary/cache tables if necessary. The issue with summary tables is to regenerate it when data change, preferably done in a regular interval. 
