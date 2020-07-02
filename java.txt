@@ -1,0 +1,498 @@
+1.1. Pay attention to coding convention
+Each language/project has different conventions. Always make sure we are following them correctly to avoid annoyance & confusion when someone tries to understand our source code.
+
+Follows Google Code Style https://google.github.io/styleguide/javaguide.html.
+Please always format your code before committing.
+1.2. Avoid independent tasks in one (long) method
+If your method is quite long and consists of some independent steps, you must consider split it to smaller methods. This will help people to understand the code faster, write UT easier and make some steps can be reused later if needed in another place.
+
+1.3. Always keep an eye on null handling
+Do not happily assume that an argument is always not null. Acceptable cases should be
+
+NullPointerException (NPE)  is really expected in the null case and someone will handle it later
+You are passing the value between your own private methods
+Chaining calls should be also avoided because you cannot check null between them. If NPE occurs you will not know its exact origin.
+
+myObject.getSomething().getSomethingElse().getAnotherThing().doSomething();
+
+Another case which often leads to NPE is auto-unboxing. Number classes (Long, Integer, Boolean, etc) are not equivalent to the corresponding primitive types (long, int, boolean, etc) because they can be null. If we use them in comparisons or assign them to primitive variable, make sure they are not null.
+Reference: https://javarevisited.blogspot.com/2013/05/ava-tips-and-best-practices-to-avoid-nullpointerexception-program-application.html
+
+public class MyClass {
+// ...
+    public Long getSomething() {
+    // return a Long value here
+    }
+}
+long myNumber = myClass.getSomething(); // NPE if getSomething() returns null
+Note: Avoid returning/using null as much as possible, consider using the following approaches:
+
+Throw exception
+
+public ActionHandler getActionHandler(Action action) {
+    switch (action) {
+        case OPEN:
+            return new OpenActionHandler();
+        case PAUSE:
+            return new PauseActionHandler();
+        case CANCEL:
+            return new CancelActionHandler();
+        default:
+            throw new BusinessException("Unsupported action " + action);
+    }
+}
+ 
+public enum Action {
+    OPEN, PAUSE, CANCEL;
+}
+Set default value
+1.4. Remember to free resource in finally block
+Prior to Java 7, developers must always pay attention on resource closure. This leads to potential leaks and complex code. As a result, we must always keep an eye on this when working with legacy code.
+A common error is to consecutively close multiple streams in one finally block. If a stream throws Exception when being closed, the later streams will not be closed. To avoid this, each stream must be closed in one try/catch block.
+
+FileInputStream fis = null;
+FileOutputStream fos = null;
+try {
+    fis = new FileInputStream(sourceFileName);
+    fos = new FileOutputStream(targetFileName);
+    // Do something with fis and fos
+} finally {
+    if (fis != null) {
+        try {
+            fis.close();
+        } catch (Exception ignore) {
+        }
+    }
+    if (fos != null) {
+        try {
+            fos.close();
+        } catch (Exception ignore) {
+        }
+    }
+}
+The code looks safe but in theory it is not. If the first close (of fis) throws an instance of Error (instead of Exception), that object cannot be caught, the second stream (fos) will not be closed as a result.
+Corrected code:
+
+FileInputStream fis = new FileInputStream(sourceFileName);
+try {
+    FileOutputStream fos = new FileOutputStream
+            (targetFileName);
+    try {
+        // Do something with fis and fos
+    } finally {
+        fos.close();
+    }
+} finally {
+    fis.close();
+}
+Since Java 7, Closable and try-with-resource are introduced which make sure resources are always closed without ugly code. Rewriting the above example in Java 7:
+
+try (
+        FileInputStream fis = new FileInputStream(sourceFileName);
+        FileOutputStream fos = new FileOutputStream(targetFileName);
+) {
+    // Do something with fis and fos
+}
+1.5. Avoid using existing API without understanding it characteristic
+Using an API which is not well implemented to deal with your case will result in potential bugs (both functionality and performance).
+For example, inside a loop you call an API which always generates remote calls or opens a Tx to query something from the database. Another case is to use an API and expect that it would handle null or special values without checking its document or source code.
+
+1.6. Avoid rewriting things which already exist in libraries
+Almost common tasks are already implemented in standard libraries. Need to check carefully before implementing something which is not very special for standard objects (String, List, Set, Mock, etc...).
+For example, developers usually try to re-implement basic functions of Java Collection Frame
+Work such as sorting a list, looking for an item in a list, generating the intersection of two sets...
+
+1.7. Make sure static initialization does not throw Exception
+Any Exception thrown in static initialization will cause ExceptionInInitializerError and prevent the Class from being created & registered to Class Loader. As a result, any reference to that Class will result in NoClassDefFoundError.
+
+public class Foo {
+    static {
+        // If Exception is thrown from here, Foo cannot be used
+    }
+}
+To avoid this, always make sure the static initialization never leaks Exception (e.g. wrapped in a big try/catch block), except if we have special reason and absolutely know what we are doing.
+
+2. Crazy thing in the loop
+A loop will magnify the bad of any poorly implemented code.
+
+Slow methods (I/O, high CPU)
+Things which are not related to the loop
+If something is not related to the loop (e.g. need no values which are only available inside the loop), just move it out to avoid redundant/duplicated processing.
+
+3. Collection Framework
+3.1. Avoid deleting first items in ArrayList if not really needed
+Deleting first items or adding new items to the head of ArrayList cause all later items to be shifted. So they are expensive tasks.
+
+3.2. Be aware of unnecessary Collection copy (e.g. getter)
+Some getters return a copy of the collection, so it is slow and expensive. Be careful when using them especially inside a loop.
+In some cases, the getter will return a copy of a List/Set/Map instead of the original one.
+Calling such getter inside a loop may result in bad performance.
+Example of getter with copy:
+
+private Set<String> eventNames;
+Set<String> getEventNames () {
+    return new TreeSet<String>(eventNames);
+}
+Another case is poor implementation which can lead to many conversions between List & Set. Need to select the data type wisely to avoid this.
+
+3.3. Avoid random access on nonRandomAccess lists
+For example, LinkedList does not implement RandomAccess interface. Getting an item by its index is slow.
+
+3.4. Avoid redundant map search
+Many people always check the availability of an entry before getting it from the Map. This is not really needed.
+For example:
+
+// Map<DeviceType, Set<String>> configs
+Set<String> attributeNames;
+if (configs.containsKey(deviceType)) {
+    attributeNames = config.get(deviceType);
+} else {
+    attributeNames = new TreeSet<String>();
+    config.put(deviceType, attributeNames);
+}
+The above code always require two map-search. Correction:
+
+Set<String> attributeNames = config.get(deviceType);
+if (attributeNames == null) {
+    attributeNames = new TreeSet<String>();
+    config.put(deviceType, attributeNames);
+}
+Note: Common methods of Map such as remove, put also return the value. Make use of this when needed to avoid redundant searches. Similar thing for Set.
+
+3.5. Do we have hashCode() & equals() ?
+Make sure hashCode() & equals() are implemented correctly, especially if our class is stored in HashSet or used as key of HashMap.
+
+3.6. Think before selecting an implementation of collection
+HashMap & ArrayList may be common. But Collection Frame Work also has other implementations such as TreeMap, LinkedList. We need to understand the advantages of each implementation and select them wisely.
+For example:
+List accept duplicate value but maintain order. Set does not accept duplicate value and does not guarantee order.
+ArrayList has less memory overhead (each item is just one reference), supports random access but is not good at modification (deleting, adding) & expansion. LinkedList has more memory overhead (each item has 3 references) but it does not require a consecutive memory and good at modifications & expansion.
+
+3.7. Use initial capacity if known
+ArrayList, HashMap (and similar classes which use internal array) have constructors which accept initial capacity. If we already know capacity, we can make use of this to avoid unnecessary memory expansion.
+Example: We want to retrieve a list of Device IDs from a list of Devices
+
+// List<Device> devices
+ 
+List<DeviceID> result = new ArrayList<DeviceID>();
+devices.stream().map(d -> d.getId()).collect(Collectors.toCollection(() -> result));
+The first line can be optimized as below:
+
+List<DeviceID> result = new ArrayList<DeviceID>(devices.size());
+3.8. In method argument, use the highest possible type
+If we write a method which just iterate a list of items and does not care about the order, the duplication, does not need fast search, etc. then instead of using List or Set as argument type, we can consider a higher type such as Collection or even Iterable so our method is more flexible.
+The same thing can be applied to classes out of the Collection Framework.
+
+Example:
+
+public static List<DeviceID> retrieveIDs(Collection<Device> devices) {
+    List<DeviceID> result = new ArrayList<DeviceID>(devices.size());
+    For(Device device :devices){
+        result.add(device.getID());
+    }
+    return result;
+}
+4. Concurrency
+4.1. Ineffective or missed synced blocks
+Sync blocks help program to run correctly in multiple-thread environment but they also slow impact performance. So they must be used wisely.
+Forget them will cause potential bugs which are not easy to find during development phase.
+
+4.2. Prone to dead lock? (threads request same resources in different orders)
+In Java code, this is hard to find, not always reproducible, dangerous and cannot be recovered.
+For example: Some methods sync monitor A, some methods sync monitor B. If a method in group A wraps a method in group B and vice-versa (another method in group B wraps another method in group A), it is prone to dead lock if those methods can be called concurrently.
+In DB, some management systems such as Oracle or MySQL (with InnoDB) can detect dead locks and report error, so it is less painful.
+
+4.3. Avoid ConcurrentModificationException
+Beware of this problem if we have an API which visit a collection/map and another API to modify it which can be called in parallel. Use sync blocks or concurrent collection to avoid this.
+
+4.4. HashMap may cause infinite loop
+If some threads are putting and getting items to/from a HashMap (or HashTable, HashSet) at the same time, it can cause infinite loop and eat CPU because of the internal implementation. This is a known issue but not being fixed because the characteristic of HashMap is not threadsafe. To avoid this, use sync blocks or ConcurrentHashMap. http://javabypatel.blogspot.com/2016/01/infinite-loop-in-hashmap.html
+
+4.5. Do we use double-checked locking correctly?
+DCL is a common pattern and can be used in many lazy-loading cases.
+For example:
+private volatile Connection conn;
+public Connection getConnection() {
+    Connection result = conn;
+    if (result == null) {
+        synchronized (this) {
+            result = conn;
+            if (result == null) {
+                conn = result = new Connection();
+            }
+        }
+    }
+    return result;
+}
+4.6. Avoid reassigning object monitor
+If object monitor is reassigned, the block is not synchronized correctly anymore. Generally, this must be avoided.
+Below is an example of reassigning monitor inside its own sync block.
+
+synchronized (monitorObj) {    // ...
+    monitorObj = <something>;    // ...
+}
+Another bad practice:
+
+Long counter = 0L;
+// ... 
+synchronized (counter) {
+    counter++;
+}
+4.7. Avoid sync literal values (e.g. Boolean.TRUE, "", 0)
+The scope if literal value is very big. They can be shared between many methods. Sync them will cause huge locking which is out of control. This must be avoided.
+
+String mutex = "";
+// ...
+synchronized (mutex) {
+    // ...
+}
+The same (bad) thing is still correct for object monitors like this:
+
+Integer mutex = 0;
+String mutex = "LOCK";
+Long mutex = 1;
+Object mutex = "MUTEXT"; // etc...
+4.8. Be careful with Object.wait()
+As we already know, wait() blocks the current thread until the object is notified (by another thread). That looks perfectly normal. But if unexpected thing happens, the object may never be notified and our thread is blocked forever.
+For safety, I recommend that we should use wait() with argument (which is the timeout). So in the worst case, our thread can still be released after a while.
+
+5. Caching
+Can we use cache (self-created, Guava/Caffeine)?
+Always think about caching when doing something which are repeated many times and return same results.
+For example: Table User has columns UserID and Email. UserID is primary key, Email is unique and rarely be changed.
+To retrieve User by Email, query to database is always needed. To avoid this, we can create an internal map from Email to UserID and use this map to retrieve UserID from Email first, after that we use UserID to retrieve User. As a result, database query is only needed in the first times.
+
+private Map<String, Long> emailToId = new HashMap<>();
+ 
+public Long getUserIdFromEmail(String email) {
+    Long result = emailToId.get(email);
+    if (result != null) {
+        return result;
+    }
+    synchronized (mutex) {
+        Long result = m_emailToId.get(email);
+        if (result != null) {
+            return result;
+        }
+        result = queryIdFromEmail(email); // Database call
+        emailToId.put(email, result);
+    }
+    return result;
+}
+Note:
+
+The above code assume we always find matched User. If Email has no matched User, it will always lead to DB query because get() always return null even if it has the entry. In this case, use containsKey() first.
+We should load the whole table during the initialization (assuming number of User fit memory)
+5.1. Is cache size limited?
+Always make sure the cache is not grown forever. Caffeine cache can clean up old values which is useful to avoid this.
+
+5.2. How to keep the cache in-sync?
+When using the cache, make sure it is up-to-date. Mostly we rely on notification to update the cache but in some scenarios such as 3rd party integration where remote call are not always guaranteed, the cache cannot be always updated correctly. As a result, we should have a mechanism to force-update the cache after a while.
+
+5.3. CacheOutput
+CacheOutput uses AOP technique with annotation style to cache the result of a method. This cache supports to refresh caching value asynchronously so it is quite useful and effective, help to improve performance of the application. However, please there are some points which need to be taken into account when using this cache:
+
+The cache does not work for internal call (call from method in the same class). The workaround is to get instance of your service then call the annotated @CacheOutput method.
+
+Don't use CacheOutput at Controller tier where the method may access user-session or contexts (e.g. brand context) which are not available in the asynchronous reloading thread.
+Don't use CacheOutput for void method.
+All the declared parameters must implement toString() method (except primitive types).
+6. Database
+6.1. Too many small transactions
+We can consider grouping them into bigger transactions.
+Example:
+
+Small Tx inside loop
+for (Long id : agentIDs) {
+    // Open Tx here
+    Agent agent = agentDAO.findById(id);
+    result.put(id, agent.getname());
+    // Done Tx
+}
+
+Corrected code:
+
+Loop inside big Tx
+// Open Tx here for (Long id : agentIDs) {
+        Agent agent = agentDAO.findById(id);
+        result.put(id, agent.getname());
+    }
+// Done Tx
+
+6.2. Too many single updates/insertions
+Consider using batch update/insert instead of updating on single record to reduce workload of DBMS.
+"Lock wait timeout" is one of the cases that DMBS is being too busy.
+
+6.3. Don't update last_update_date without any serious consideration
+Let see the following code:
+
+INSERT INTO event(event_id, event_name, status, last_update_by, last_update_date)
+VALUES(pEventId, pEventName, pStatus, 'SYSTEM', now())
+ON DUPLICATE KEY UPDATE
+event_name = pEventName,
+status = pStatus,
+last_update_date = now();
+If there is no change on either event_name or status, but the row still be updated for last_update_date, this makes no sense and causes overhead for DBMS.
+Recommended approach:
+
+Always define the last_update_date column as `last_update_date` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+Don't update last_update_date column explicitly (if not required)
+7. I/O
+7.1. Is buffered/compressed stream used?
+Buffered Streams reduce actual I/O while Compressed Streams reduce number of streamed data. Think about them before playing with I/O stuffs.
+
+7.2. Do we clean up temp file?
+Make sure we always delete temporary files to avoid out of disk space. A periodical cleanup is recommended because sometimes the main code flow cannot delete files as expected (e.g. getting Exceptions).
+
+7.3. Is temp file limited in size?
+Similar to the caches in memory, always make sure temporary file does not grow forever.
+
+8. Logging
+8.1. Is stack trace in error log needed?
+Sometimes, stack trace is useless but they flood log file quickly (e.g. some Timeout Exceptions). In such case, we may need to log full stack trace in FINE level only.
+
+8.2. Is log level (FINE, INFO) correct?
+Useful information in FINE level will make it hard to investigate production bugs.
+Too many information in INFO level will flood the log and also make it hard see useful things.
+
+8.3. Is isLoggable used?
+The time to build log message may not be trivial (can be a method call). Check log level check to avoid useless string
+
+8.4. Is context info logged?
+Logs without context information (e.g. userId, eventId, lineId, etc.) are mostly useless. It is painful if you have production issue but cannot know from where the error occurred.
+
+8.5. Is context class of your log correct (copy/paste issue)
+Copy/paste LOGGER without correcting the context class will produce confusing log and may create unnecessary dependency.
+
+8.6. Trash characters
+No need to log trash characters (e.g. *****, ------). We can always use Search Function instead of looking for the logged line manually.
+Some developers may use trash characters as prefix of log messages to make them "more visible". What happens if everyone uses this way?
+
+8.7. Try to log in one line
+If possible, always to log all related information in one line. This will be friendly to grep tools.
+
+Examples of poor logging:
+
+LOGGER.info("----------------------------------------------------------");
+LOGGER.info("***** Prepare data: " + prepareTime + " ms");
+LOGGER.info("***** Process data: " + processTime + " ms");
+LOGGER.info("---------------------------------------------------------");
+Corrected code:
+
+
+LOGGER.info("Prepare data: " + prepareTime + " ms. Process data: " + processTime + " ms");
+8.8. DO NOT LOG sensitive information
+Sensitive information should not be write to log such as:
+
+Credentials (password, 3rd party username password)
+Keys, Tokens of 3rd parties
+Encryption Keys
+9. Working with Strings
+9.1. Avoid massive string concatenation with + or +=
+In a loop, String concatenation must be avoided because Java always creates temporary StringBuilder objects to handle it behind-the-scene. As a result, each iteration will generate redundant objects, do repeated tasks (e.g. copying data in memory).
+
+
+public String concatDirectly(int count) {
+    String result = "";
+    for (int i = 0; i < count; i++) {
+        result += i;
+    }
+    return result;
+}
+ 
+public String concatBuilder(int count) {
+    StringBuilder result = new StringBuilder();
+    for (int i = 0; i < count; i++) {
+        result.append(i);
+    }
+    return result.toString();
+}
+ 
+public void testConcat() {
+    int count = 10000;
+ 
+    long startTime = System.currentTimeMillis();
+    String resultBuilder = concatBuilder(count);
+    System.out.println("Time to concat with StringBuilder: " + (System.currentTimeMillis() - startTime));
+    startTime = System.currentTimeMillis();
+    String resultDirect = concatDirectly(count);
+    System.out.println("Time to concat directly: " + (System.currentTimeMillis() - startTime));
+    System.out.println("Is the same result: " + resultDirect.equals(resultBuilder));  // Both methods must produce same result
+}
+Result:
+
+Time to concat with StringBuilder: 21
+Time to concat directly: 504
+Is the same result: true
+
+Note: Manually creating temporary StringBuilder (or StringBuffer) is not needed if the concatenation is in a single line of code because Java compiler will do the same thing for us.
+
+9.2. Implement toString() for model classes
+VO class with proper toString() implementation will help debugging and logging easier.
+We should create customized toString() for standard classes when needed (e.g. for a multiple-level Map).
+
+9.3. replace() and replaceAll()
+What happen with the below code:
+
+String result = someString.replaceAll(".", ",");
+The developer expects to replace every dot by comma, so replaceAll() looks like a perfect choice.
+Actually, replaceAll() works with regular expression: every sequence which matches the pattern will be replaced. Unfortunately, dot matches all characters. As a result, the whole string is replaced by commas.
+In this case, we need to use replace() which relies on perfect-match comparison instead of regular expression. Unlike its name, replace() will replaces all occurrences the provided value, not just the first one.
+In normal scenarios, replaceAll() and replace() give the same result, but if we don't play with regular expression, replace() is safer and faster.
+
+1. General
+1.1. Pay attention to coding convention
+1.2. Avoid independent tasks in one (long) method
+1.3. Always keep an eye on null handling
+1.4. Remember to free resource in finally block
+1.5. Avoid using existing API without understanding it characteristic
+1.6. Avoid rewriting things which already exist in libraries
+1.7. Make sure static initialization does not throw Exception
+2. Crazy thing in the loop
+3. Collection Framework
+3.1. Avoid deleting first items in ArrayList if not really needed
+3.2. Be aware of unnecessary Collection copy (e.g. getter)
+3.3. Avoid random access on nonRandomAccess lists
+3.4. Avoid redundant map search
+3.5. Do we have hashCode() & equals() ?
+3.6. Think before selecting an implementation of collection
+3.7. Use initial capacity if known
+3.8. In method argument, use the highest possible type
+4. Concurrency
+4.1. Ineffective or missed synced blocks
+4.2. Prone to dead lock? (threads request same resources in different orders)
+4.3. Avoid ConcurrentModificationException
+4.4. HashMap may cause infinite loop
+4.5. Do we use double-checked locking correctly?
+4.6. Avoid reassigning object monitor
+4.7. Avoid sync literal values (e.g. Boolean.TRUE, "", 0)
+4.8. Be careful with Object.wait()
+5. Caching
+5.1. Is cache size limited?
+5.2. How to keep the cache in-sync?
+5.3. CacheOutput
+6. Database
+6.1. Too many small transactions
+6.2. Too many single updates/insertions
+6.3. Don't update last_update_date without any serious consideration
+7. I/O
+7.1. Is buffered/compressed stream used?
+7.2. Do we clean up temp file?
+7.3. Is temp file limited in size?
+8. Logging
+8.1. Is stack trace in error log needed?
+8.2. Is log level (FINE, INFO) correct?
+8.3. Is isLoggable used?
+8.4. Is context info logged?
+8.5. Is context class of your log correct (copy/paste issue)
+8.6. Trash characters
+8.7. Try to log in one line
+8.8. DO NOT LOG sensitive information
+9. Working with Strings
+9.1. Avoid massive string concatenation with + or +=
+9.2. Implement toString() for model classes
+9.3. replace() and replaceAll()
+
+
+
+
