@@ -1,0 +1,125 @@
+public class FilterService {
+
+    private final String _VIEW = "_VIEW";
+    private final String _EDIT = "_EDIT";
+    private final String _NO_ACCESS = "_NO_ACCESS";
+    private final String HASH_DATA = "****";
+
+    public void apply4Get(Object bean, List<String> permissions) {
+        if (Objects.isNull(bean)) {
+            return;
+        }
+        Field[] fields = bean.getClass().getSuperclass().getDeclaredFields();
+        for (Field field1 : fields) {
+            if (field1.getAnnotation(ACFilter.class) != null) {
+                setField4Get(bean, field1, permissions);
+            }
+        }
+        if (Collection.class.isAssignableFrom(bean.getClass())) {
+            ArrayList arraylist = (ArrayList) bean;
+            arraylist.forEach(object -> doWithGet(object, permissions));
+        } else if (Map.class.isAssignableFrom(bean.getClass())) {
+            Map map = (Map) bean;
+            map.values().forEach(object -> doWithGet(object, permissions));
+        } else {
+            doWithGet(bean, permissions);
+        }
+    }
+
+    public void apply4Update(Object bean, List<String> permissions) {
+        if (Objects.isNull(bean)) {
+            return;
+        }
+        Field[] fields = bean.getClass().getSuperclass().getDeclaredFields();
+        for (Field field1 : fields) {
+            if (field1.getAnnotation(ACFilter.class) != null) {
+                setField4Update(bean, field1, permissions);
+            }
+        }
+        if (Collection.class.isAssignableFrom(bean.getClass())) {
+            ArrayList arraylist = (ArrayList) bean;
+            arraylist.forEach(object -> doWithUpdate(object, permissions));
+        } else if (Map.class.isAssignableFrom(bean.getClass())) {
+            Map map = (Map) bean;
+            map.values().forEach(object -> doWithUpdate(object, permissions));
+        } else {
+            doWithUpdate(bean, permissions);
+        }
+    }
+
+    private void doWithGet(Object bean, List<String> permissions) {
+        ReflectionUtils.doWithFields(bean.getClass(),
+                (Field field) -> {
+                    ACFilter annotation = field.getAnnotation(ACFilter.class);
+                    String element = annotation.value();
+                    boolean hierachy = annotation.hierarchy();
+                    ReflectionUtils.makeAccessible(field);
+                    if (StringUtils.isNotEmpty(element)) {
+                        setField4Get(bean, field, permissions);
+                    }
+                    if (hierachy) {
+                        apply4Get(field.get(bean), permissions);
+                    }
+                }, (Field field) -> {
+                    return field.getAnnotation(ACFilter.class) != null;
+                }
+        );
+    }
+    private void doWithUpdate(Object bean, List<String> permissions) {
+        ReflectionUtils.doWithFields(bean.getClass(),
+                (Field field) -> {
+                    ACFilter annotation = field.getAnnotation(ACFilter.class);
+                    String element = annotation.value();
+                    boolean hierachy = annotation.hierarchy();
+                    ReflectionUtils.makeAccessible(field);
+                    if (StringUtils.isNotEmpty(element)) {
+                        setField4Update(bean, field, permissions);
+                    }
+                    if (hierachy) {
+                        apply4Update(field.get(bean), permissions);
+                    }
+                }, (Field field) -> {
+                    return field.getAnnotation(ACFilter.class) != null;
+                }
+        );
+    }
+
+    private void setField4Get(Object bean, Field field, List<String> permissions) {
+        ACFilter annotation = field.getAnnotation(ACFilter.class);
+        String element = annotation.value();
+        ReflectionUtils.makeAccessible(field);
+        if (permissions.contains(element + _NO_ACCESS)) {
+            if (field.getType().isAssignableFrom(Date.class)) {
+                ReflectionUtils.setField(field, bean, null);
+            } else {
+                ReflectionUtils.setField(field, bean, HASH_DATA);
+            }
+        }else if (permissions.contains(element + _VIEW) || permissions.contains(element + _EDIT)) {
+            /*
+            * system should check view and edit first so don't remove this expression
+            * do nothing
+             */
+        } else {
+            ReflectionUtils.setField(field, bean, null);
+        }
+    }
+
+    private void setField4Update(Object bean, Field field, List<String> permissions) {
+        ACFilter annotation = field.getAnnotation(ACFilter.class);
+        String element = annotation.value();
+        ReflectionUtils.makeAccessible(field);
+        if (!permissions.contains(element + _EDIT)) {
+            ReflectionUtils.setField(field, bean, null);
+        }
+    }
+
+}
+
+
+@Target({ElementType.FIELD})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface ACFilter {
+    String value() default "";
+
+    boolean hierarchy() default false;
+}
